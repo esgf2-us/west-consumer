@@ -1,7 +1,7 @@
 import logging
 from globus import ConsumerSearchClient
 from consumer import KafkaConsumerService
-from settings import event_stream, globus_search_client_credentials, globus_search
+from settings.production import (event_stream, globus_search_client_credentials, globus_search)
 
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)

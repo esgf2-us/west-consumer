@@ -1,0 +1,17 @@
+boto3==1.35.49
+botocore==1.35.49
+certifi==2024.8.30
+cffi==1.17.1
+charset-normalizer==3.4.0
+confluent-kafka==2.6.0
+cryptography==43.0.3
+globus-sdk==3.46.0
+idna==3.10
+jmespath==1.0.1
+pycparser==2.22
+PyJWT==2.9.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
+requests==2.32.3
+s3transfer==0.10.3
+six==1.16.0
