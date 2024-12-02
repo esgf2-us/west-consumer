@@ -1,4 +1,4 @@
-FROM public.ecr.aws/sam/build-python3.9:latest
+FROM public.ecr.aws/sam/build-python3.9:latest-x86_64
 
 ENV LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib
 ENV PATH=/root/.local/bin:/sbin:/usr/sbin:${PATH}
