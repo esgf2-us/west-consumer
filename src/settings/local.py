@@ -21,26 +21,6 @@ policy_path = "file://" + policy_path
 # Load the .env file
 load_dotenv(env_path)
 
-# ESGF2 Globus Project
-project_id = "cae45630-2a4b-47b9-b704-d870e341da67"
-
-# ESGF2 STAC Transaction API client
-publisher = {
-    "client_id": "ec5f07c0-7ed8-4f2b-94f2-ddb6f8fc91a3",
-    "redirect_uri": "https://auth.globus.org/v2/web/auth-code",
-}
-
-# ESGF2 STAC Transaction API service
-stac_api = {
-    "client_id": os.environ.get("STAC_LIENT_ID"),
-    "client_secret": os.environ.get("STAC_CLIENT_SECRET"),
-    "issuer": "https://auth.globus.org",
-    "access_control_policy": policy_path,
-    "scope_id": "ca49f459-a4f8-420c-b55f-194df11abc0f",
-    "scope_string": "https://auth.globus.org/scopes/6fa3b827-5484-42b9-84db-f00c7a183a6a/ingest",
-    "url": "0.0.0.0:9000",
-}
-
 event_stream = {
     "config": {
         "bootstrap.servers": "host.docker.internal:9092",
@@ -53,14 +33,11 @@ event_stream = {
 }
 
 globus_search_client_credentials = {
-    "client_id": os.environ.get("SEARCH_CLIENT_ID"),
-    "client_secret": os.environ.get("SEARCH_CLIENT_SECRET")
+    "client_id": os.environ.get("CLIENT_ID"),
+    "client_secret": os.environ.get("CLIENT_SECRET")
 }
-
-print(globus_search_client_credentials)
 
 # ESGF2 Globus Search
 globus_search = {
     "index": "58f3a9eb-51f8-410e-8e68-da4bd6617ca6",
-    # "index": "f037bb33-3413-448b-8486-8400bee5181a",
 }
