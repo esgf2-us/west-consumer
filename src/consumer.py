@@ -35,7 +35,8 @@ class KafkaConsumerService:
 
                 logging.info(f"Consumed {len(messages)} messages")
                 first_msg = messages[0]
-                self.seek_partition = TopicPartition(first_msg.topic(), first_msg.partition(), first_msg.offset())
+                offset = 0 if not first_msg.offset() else first_msg.offset()
+                self.seek_partition = TopicPartition(first_msg.topic(), first_msg.partition(), offset)
 
                 messages_data = self.process_messages(messages)
                 if not messages_data:
