@@ -13,7 +13,7 @@ if run_environment == "local":
     event_stream = {
         "config": {
             "auto.offset.reset": "latest",
-            "bootstrap.servers": "host.docker.internal:9092",
+            "bootstrap.servers": "localhost:9092",
             "client.id": socket.gethostname(),
             "enable.auto.commit": False,
             "group.id": "westconsumer",
