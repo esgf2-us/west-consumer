@@ -1,6 +1,8 @@
-import time
 import logging
-from globus_sdk import ConfidentialAppAuthClient, AccessTokenAuthorizer, SearchClient
+import time
+
+from globus_sdk import (AccessTokenAuthorizer, ConfidentialAppAuthClient,
+                        SearchClient)
 from globus_sdk.scopes import SearchScopes
 
 
