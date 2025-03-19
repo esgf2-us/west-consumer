@@ -1,11 +1,12 @@
-FROM public.ecr.aws/sam/build-python3.9:latest-x86_64
+FROM public.ecr.aws/sam/build-python3.12:latest-x86_64
 
 ENV LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib
 ENV PATH=/root/.local/bin:/sbin:/usr/sbin:${PATH}
 
-RUN yum update -y
-RUN yum groupinstall -y "Development Tools"
-RUN yum install -y gcc git libcurl-devel libssl-dev make openssl-devel which
+RUN dnf upgrade -y
+RUN dnf group install -y "Development Tools"
+RUN dnf install -y gcc git libcurl-devel make openssl openssl-devel which
+
 RUN git clone https://github.com/confluentinc/librdkafka  && \
     cd librdkafka && git checkout tags/v2.6.0 && \
     ./configure --install-deps && make && make install && \

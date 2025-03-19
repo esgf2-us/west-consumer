@@ -64,7 +64,8 @@ class ConsumerSearchClient:
             if state == "SUCCESS":
                 return True
             if state == "FAILED":
-                logging.errort(f"Ingestion task {task_id} failed")
+                logging.error(f"Ingestion task {task_id} failed")
+                logging.error(r.text)
                 return False
             time.sleep(1)
         return True
