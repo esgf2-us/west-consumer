@@ -7,10 +7,13 @@ charset-normalizer==3.4.0
 click==8.1.8
 confluent-kafka==2.6.0
 cryptography==43.0.3
+dotenv==0.9.9
 globus-sdk==3.46.0
 idna==3.10
 isort==6.0.0
 jmespath==1.0.1
+jsonpatch==1.33.0
+jsonpointer==3.0.0
 mypy-extensions==1.0.0
 packaging==24.2
 pathspec==0.12.1

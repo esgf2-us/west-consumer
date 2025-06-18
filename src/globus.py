@@ -1,13 +1,12 @@
 import logging
 import time
 
-from globus_sdk import (AccessTokenAuthorizer, ConfidentialAppAuthClient,
-                        SearchClient)
+from globus_sdk import AccessTokenAuthorizer, ConfidentialAppAuthClient, SearchClient
 from globus_sdk.scopes import SearchScopes
 
 
 class ConsumerSearchClient:
-    def __init__(self, credentials, search_index):
+    def __init__(self, credentials, search_index, error_producer):
         confidential_client = ConfidentialAppAuthClient(
             client_id=credentials.get("client_id"),
             client_secret=credentials.get("client_secret"),
@@ -19,6 +18,7 @@ class ConsumerSearchClient:
         authorizer = AccessTokenAuthorizer(search_tokens.get("access_token"))
         self.search_client = SearchClient(authorizer=authorizer)
         self.esgf_index = search_index
+        self.error_producer = error_producer
 
     def convert_assets(self, item):
         converted_assets = []
