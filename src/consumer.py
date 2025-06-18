@@ -44,7 +44,7 @@ class KafkaConsumerService:
                     self.consumer.seek(self.seek_partition)
                     continue
 
-                if not self.message_processor.ingest(messages_data):
+                if not self.message_processor.process_messages(messages_data):
                     self.consumer.seek(self.seek_partition)
                     continue
 
