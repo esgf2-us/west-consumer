@@ -21,9 +21,7 @@ class KafkaConsumerService:
                 data = json.loads(msg.value())
                 messages_data.append(data)
             except json.JSONDecodeError as e:
-                logging.error(
-                    f"Data deserialization error at offset {msg.offset()}: {e}."
-                )
+                logging.error(f"Data deserialization error at offset {msg.offset()}: {e}.")
                 return False
         return messages_data
 
@@ -39,16 +37,14 @@ class KafkaConsumerService:
                 logging.info(f"Consumed {len(messages)} messages")
                 first_msg = messages[0]
                 offset = 0 if not first_msg.offset() else first_msg.offset()
-                self.seek_partition = TopicPartition(
-                    first_msg.topic(), first_msg.partition(), offset
-                )
+                self.seek_partition = TopicPartition(first_msg.topic(), first_msg.partition(), offset)
 
                 messages_data = self.process_messages(messages)
                 if not messages_data:
                     self.consumer.seek(self.seek_partition)
                     continue
 
-                if not self.message_processor.ingest(messages_data):
+                if not self.message_processor.process_messages(messages_data):
                     self.consumer.seek(self.seek_partition)
                     continue
 

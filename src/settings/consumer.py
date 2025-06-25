@@ -18,7 +18,7 @@ if run_environment == "local":
             "enable.auto.commit": False,
             "group.id": "westconsumer",
         },
-        "topics": ["esgf-local"],
+        "topics": ["esgf-local.transactions"],
     }
 else:
     event_stream = {
@@ -45,6 +45,4 @@ globus_search_client_credentials = {
 }
 
 # ESGF2 Globus Search
-globus_search = {
-    "index": os.environ.get("GLOBUS_SEARCH_INDEX")
-}
+globus_search = {"index": os.environ.get("GLOBUS_SEARCH_INDEX")}
