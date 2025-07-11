@@ -2,8 +2,9 @@ import logging
 import time
 import jsonpatch
 
-from globus_sdk import AccessTokenAuthorizer, ConfidentialAppAuthClient, SearchClient
+from globus_sdk import ClientCredentialsAuthorizer, ConfidentialAppAuthClient, SearchClient
 from globus_sdk.scopes import SearchScopes
+from globus_sdk.services.search.errors import SearchAPIError
 
 
 class ConsumerSearchClient:
@@ -12,11 +13,10 @@ class ConsumerSearchClient:
             client_id=credentials.get("client_id"),
             client_secret=credentials.get("client_secret"),
         )
-        token_response = confidential_client.oauth2_client_credentials_tokens(
-            requested_scopes=SearchScopes.all,
+        authorizer = ClientCredentialsAuthorizer(
+            confidential_client,
+            scopes=SearchScopes.all,
         )
-        search_tokens = token_response.by_resource_server.get("search.api.globus.org")
-        authorizer = AccessTokenAuthorizer(search_tokens.get("access_token"))
         self.search_client = SearchClient(authorizer=authorizer)
         self.esgf_index = search_index
         self.error_producer = error_producer
@@ -68,7 +68,14 @@ class ConsumerSearchClient:
 
     def post(self, message_data):
         item = message_data.get("data").get("payload").get("item")
-        globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
+        try:
+            globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
+        except SearchAPIError as e:
+            if e.http_status == 404:
+                item["assets"] = self.convert_assets(item.get("assets"))
+                gmeta_entry = self.gmetaentry(item)
+                return gmeta_entry
+
         if globus_response.data:
             logging.info(f"Item with ID {item.get('id')} already exists in the index.")
             self.error_producer.produce(
@@ -76,10 +83,9 @@ class ConsumerSearchClient:
                 key=item.get("id"),
                 value=f"Item with ID {item.get('id')} already exists in the index.",
             )
+            print("Item already exists, returning None")
             return None
-        item["assets"] = self.convert_assets(item.get("assets"))
-        gmeta_entry = self.gmetaentry(item)
-        return gmeta_entry
+        return None
 
     def json_patch(self, message_data):
         payload = message_data.get("data").get("payload")
@@ -93,9 +99,7 @@ class ConsumerSearchClient:
                 value=f"Item with ID {item_id} does not exist in the index.",
             )
             return None
-        gmeta_entry = jsonpatch.apply_patch(
-            globus_response.data.get("content"), payload.get("patch")
-        ) 
+        gmeta_entry = jsonpatch.apply_patch(globus_response.data.get("content"), payload.get("patch"))
         return gmeta_entry
 
     def delete(self, subject):
@@ -115,6 +119,7 @@ class ConsumerSearchClient:
         try:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
+            print(f"Processing message with method: {method}")
             if method == "POST":
                 return self.post(message_data)
             if method == "PUT":
@@ -140,12 +145,13 @@ class ConsumerSearchClient:
             if entry:
                 gmeta.append(entry)
         if not gmeta:
-            return False
+            return True
 
         gmetalist = {"ingest_type": "GMetaList", "ingest_data": {"gmeta": gmeta}}
 
         r = self.search_client.ingest(self.esgf_index, gmetalist)
         task_id = r.get("task_id")
+        print("Ingested successfully, waiting for task to complete...")
 
         while True:
             r = self.search_client.get_task(task_id)
