@@ -1,8 +1,9 @@
 import logging
 import time
-import jsonpatch
 
-from globus_sdk import ClientCredentialsAuthorizer, ConfidentialAppAuthClient, SearchClient
+import jsonpatch
+from globus_sdk import (ClientCredentialsAuthorizer, ConfidentialAppAuthClient,
+                        SearchClient)
 from globus_sdk.scopes import SearchScopes
 from globus_sdk.services.search.errors import SearchAPIError
 
@@ -69,7 +70,9 @@ class ConsumerSearchClient:
     def post(self, message_data):
         item = message_data.get("data").get("payload").get("item")
         try:
-            globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
+            globus_response = self.search_client.get_subject(
+                self.esgf_index, item.get("id")
+            )
         except SearchAPIError as e:
             if e.http_status == 404:
                 item["assets"] = self.convert_assets(item.get("assets"))
@@ -99,7 +102,9 @@ class ConsumerSearchClient:
                 value=f"Item with ID {item_id} does not exist in the index.",
             )
             return None
-        gmeta_entry = jsonpatch.apply_patch(globus_response.data.get("content"), payload.get("patch"))
+        gmeta_entry = jsonpatch.apply_patch(
+            globus_response.data.get("content"), payload.get("patch")
+        )
         return gmeta_entry
 
     def delete(self, subject):
