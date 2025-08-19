@@ -4,8 +4,6 @@ import socket
 
 from dotenv import load_dotenv
 
-from src.utils import load_access_control_policy
-
 # Load the .env file
 load_dotenv()
 
