@@ -30,7 +30,7 @@ class ConsumerSearchClient:
         for key, value in assets.items():
             normalized_assets.append({"name": key} | value)
         for asset in normalized_assets:
-            if "alternate" in asset:
+            if "alternate" in asset and asset.get("alternate"):
                 asset["alternate"] = self.normalize_assets(asset["alternate"])
         return normalized_assets
 
@@ -40,6 +40,8 @@ class ConsumerSearchClient:
             name = asset.pop("name")
             if "alternate" in asset:
                 asset["alternate"] = self.denormalize_assets(asset["alternate"])
+            else:
+                asset["alternate"] = {}
             denormalized_assets[name] = asset
         return denormalized_assets
 
