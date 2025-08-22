@@ -1,9 +1,12 @@
 import logging
 import time
-
 import jsonpatch
-from globus_sdk import (ClientCredentialsAuthorizer, ConfidentialAppAuthClient,
-                        SearchClient)
+
+from globus_sdk import (
+    ClientCredentialsAuthorizer,
+    ConfidentialAppAuthClient,
+    SearchClient,
+)
 from globus_sdk.scopes import SearchScopes
 from globus_sdk.services.search.errors import SearchAPIError
 
@@ -22,11 +25,25 @@ class ConsumerSearchClient:
         self.esgf_index = search_index
         self.error_producer = error_producer
 
-    def convert_assets(self, assets):
-        converted_assets = []
+    def normalize_assets(self, assets):
+        normalized_assets = []
         for key, value in assets.items():
-            converted_assets.append({"name": key} | value)
-        return converted_assets
+            normalized_assets.append({"name": key} | value)
+        for asset in normalized_assets:
+            if "alternate" in asset and asset.get("alternate"):
+                asset["alternate"] = self.normalize_assets(asset["alternate"])
+        return normalized_assets
+
+    def denormalize_assets(self, assets):
+        denormalized_assets = {}
+        for asset in assets:
+            name = asset.pop("name")
+            if "alternate" in asset:
+                asset["alternate"] = self.denormalize_assets(asset["alternate"])
+            else:
+                asset["alternate"] = {}
+            denormalized_assets[name] = asset
+        return denormalized_assets
 
     def gmetaentry(self, item):
         return {
@@ -70,12 +87,10 @@ class ConsumerSearchClient:
     def post(self, message_data):
         item = message_data.get("data").get("payload").get("item")
         try:
-            globus_response = self.search_client.get_subject(
-                self.esgf_index, item.get("id")
-            )
+            globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
         except SearchAPIError as e:
             if e.http_status == 404:
-                item["assets"] = self.convert_assets(item.get("assets"))
+                item["assets"] = self.normalize_assets(item.get("assets"))
                 gmeta_entry = self.gmetaentry(item)
                 return gmeta_entry
 
@@ -102,9 +117,11 @@ class ConsumerSearchClient:
                 value=f"Item with ID {item_id} does not exist in the index.",
             )
             return None
-        gmeta_entry = jsonpatch.apply_patch(
-            globus_response.data.get("content"), payload.get("patch")
-        )
+        item = globus_response.data.get("entries")[0].get("content")
+        item["assets"] = self.denormalize_assets(item.get("assets"))
+        patched_item = jsonpatch.apply_patch(item, payload.get("patch").get("operations"))
+        patched_item["assets"] = self.normalize_assets(patched_item.get("assets"))
+        gmeta_entry = self.gmetaentry(patched_item)
         return gmeta_entry
 
     def delete(self, subject):
@@ -131,8 +148,6 @@ class ConsumerSearchClient:
                 return self.put(message_data)
             if method == "JSON_PATCH" or method == "PATCH":
                 return self.json_patch(message_data)
-            if method == "MERGE_PATCH":
-                return self.merge_patch(message_data)
             return None
         except Exception as e:
             logging.error(f"Error processing message data: {e}")
