@@ -1,22 +1,20 @@
 import logging
 
-from consumer import KafkaConsumerService
-from globus import ConsumerSearchClient
-from producer import KafkaProducer
-from settings.consumer import event_stream, globus_search, globus_search_client_credentials
-from settings.producer import error_event_stream
+from esgf_core_utils.models.kafka.consumer import KafkaConsumer
 
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+from message_processor import message_processor
+
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
+
+def run():
+    """run consumer"""
+    consumer = KafkaConsumer(message_processor=message_processor)
+
+    consumer.start()
 
 
 if __name__ == "__main__":
-    error_producer = KafkaProducer(config=error_event_stream.get("config"))
-
-    message_processor = ConsumerSearchClient(globus_search_client_credentials, globus_search.get("index"), error_producer)
-
-    consumer_service = KafkaConsumerService(
-        event_stream.get("config"),
-        event_stream.get("topics"),
-        message_processor,
-    )
-    consumer_service.start()
+    run()

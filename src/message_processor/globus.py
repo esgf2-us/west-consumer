@@ -1,7 +1,9 @@
 import logging
 import time
-import jsonpatch
 
+import jsonpatch
+from esgf_core_utils.models.kafka.message_processor import MessageProcessor
+from esgf_core_utils.models.kafka.producer import KafkaProducer
 from globus_sdk import (
     ClientCredentialsAuthorizer,
     ConfidentialAppAuthClient,
@@ -10,20 +12,22 @@ from globus_sdk import (
 from globus_sdk.scopes import SearchScopes
 from globus_sdk.services.search.errors import SearchAPIError
 
+from settings import settings
 
-class ConsumerSearchClient:
-    def __init__(self, credentials, search_index, error_producer):
+
+class GlobusMessageProcessor(MessageProcessor):
+    def __init__(self):
         confidential_client = ConfidentialAppAuthClient(
-            client_id=credentials.get("client_id"),
-            client_secret=credentials.get("client_secret"),
+            client_id=settings.client.client_id,
+            client_secret=settings.client.client_secret,
         )
         authorizer = ClientCredentialsAuthorizer(
             confidential_client,
             scopes=SearchScopes.all,
         )
         self.search_client = SearchClient(authorizer=authorizer)
-        self.esgf_index = search_index
-        self.error_producer = error_producer
+        self.esgf_index = settings.client.search_index
+        self.error_producer = KafkaProducer()
 
     def normalize_assets(self, assets):
         normalized_assets = []
@@ -87,7 +91,9 @@ class ConsumerSearchClient:
     def post(self, message_data):
         item = message_data.get("data").get("payload").get("item")
         try:
-            globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
+            globus_response = self.search_client.get_subject(
+                self.esgf_index, item.get("id")
+            )
         except SearchAPIError as e:
             if e.http_status == 404:
                 item["assets"] = self.normalize_assets(item.get("assets"))
@@ -119,7 +125,7 @@ class ConsumerSearchClient:
             return None
         item = globus_response.data.get("entries")[0].get("content")
         item["assets"] = self.denormalize_assets(item.get("assets"))
-        patched_item = jsonpatch.apply_patch(item, payload.get("patch").get("operations"))
+        patched_item = jsonpatch.apply_patch(item, payload.get("patch"))
         patched_item["assets"] = self.normalize_assets(patched_item.get("assets"))
         gmeta_entry = self.gmetaentry(patched_item)
         return gmeta_entry
@@ -179,7 +185,7 @@ class ConsumerSearchClient:
             if state == "SUCCESS":
                 return True
             if state == "FAILED":
-                logging.error(f"Ingestion task {task_id} failed")
+                logging.error("Ingestion task %s failed", task_id)
                 logging.error(r.text)
                 return False
             time.sleep(1)
