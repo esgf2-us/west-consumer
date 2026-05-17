@@ -10,7 +10,10 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 
 
 if __name__ == "__main__":
-    error_producer = KafkaProducer(config=error_event_stream.get("config"))
+    error_producer = KafkaProducer(
+        config=error_event_stream.get("config"),
+        topic=error_event_stream.get("topic"),
+    )
 
     message_processor = ConsumerSearchClient(globus_search_client_credentials, globus_search.get("index"), error_producer)
 

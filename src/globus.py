@@ -89,7 +89,6 @@ class ConsumerSearchClient:
         if globus_response.data:
             logging.warn(f"Item with ID {item.get('id')} already exists in the index.")
             self.error_producer.produce(
-                topic="esgf2.integration-environment.west.errors",
                 key=item.get("id"),
                 value=f"Item with ID {item.get('id')} already exists in the index.",
             )
@@ -106,7 +105,6 @@ class ConsumerSearchClient:
             if e.http_status == 404:
                 logging.warn(f"Item with ID {item_id} does not exist in the index.")
                 self.error_producer.produce(
-                    topic="esgf2.integration-environment.west.errors",
                     key=item_id,
                     value=f"Item with ID {item_id} does not exist in the index.",
                 )
@@ -136,7 +134,6 @@ class ConsumerSearchClient:
             return True
         logging.warn(f"Item with ID {subject} does not exist in the index.")
         self.error_producer.produce(
-            topic="esgf-local.errors",
             key=subject,
             value=f"Item with ID {subject} does not exist in the index.",
         )
@@ -157,7 +154,6 @@ class ConsumerSearchClient:
         except Exception as e:
             logging.error(f"Error processing message data: {e}")
             self.error_producer.produce(
-                topic="esgf-local.errors",
                 key=message_data.get("data").get("payload").get("item").get("id"),
                 value=str(e),
             )

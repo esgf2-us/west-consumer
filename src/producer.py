@@ -21,11 +21,12 @@ class StdoutProducer(BaseProducer):
 
 
 class KafkaProducer(BaseProducer):
-    def __init__(self, config):
+    def __init__(self, config, topic):
         self.producer = Producer(config)
-        logger.info("KafkaProducer initialized")
+        self.topic = topic
+        logger.info("KafkaProducer initialized for topic %s", topic)
 
-    def produce(self, topic, key, value):
+    def produce(self, key, value):
         delivery_reports = []
 
         def delivery_report(err, msg):
@@ -35,6 +36,6 @@ class KafkaProducer(BaseProducer):
                 logger.info(f"Message {msg.key()} successfully delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
             delivery_reports.append((err, msg))
 
-        self.producer.produce(topic=topic, key=key, value=value, callback=delivery_report)
+        self.producer.produce(topic=self.topic, key=key, value=value, callback=delivery_report)
         self.producer.flush()
         return delivery_reports
