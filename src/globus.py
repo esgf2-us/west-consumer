@@ -85,6 +85,8 @@ class ConsumerSearchClient:
                 item["assets"] = self.normalize_assets(item.get("assets"))
                 gmeta_entry = self.gmetaentry(item)
                 return gmeta_entry
+            logging.error(f"Error when getting item {item_id} from Globus Search: {e}")
+            sys.exit(1)
 
         if globus_response.data:
             logging.warn(f"Item with ID {item.get('id')} already exists in the index.")
@@ -92,7 +94,6 @@ class ConsumerSearchClient:
                 key=item.get("id"),
                 value=f"Item with ID {item.get('id')} already exists in the index.",
             )
-            return None
         return None
 
     def json_patch(self, message_data):
@@ -111,6 +112,7 @@ class ConsumerSearchClient:
                 return None
             logging.error(f"Error when getting item {item_id} from Globus Search: {e}")
             sys.exit(1)
+
         item = globus_response.data.get("entries")[0].get("content")
         item["assets"] = self.denormalize_assets(item.get("assets"))
 
@@ -143,11 +145,13 @@ class ConsumerSearchClient:
         )
         return None
 
-    def process_message(self, message_data):
+    def process_message(self, message_data, partition, offset):
         try:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
-            logging.info(f"Processing message with method: {method}")
+            logging.info(
+                f"Processing message method={method} partition={partition} offset={offset}"
+            )
             if method == "POST":
                 return self.post(message_data)
             if method == "PUT":
@@ -156,17 +160,19 @@ class ConsumerSearchClient:
                 return self.json_patch(message_data)
             return None
         except Exception as e:
-            logging.error(f"Error processing message data: {e}")
+            logging.error(
+                f"Error processing message partition={partition} offset={offset}: {e}"
+            )
             self.error_producer.produce(
-                key=message_data.get("data").get("payload").get("item").get("id"),
+                key=payload.get("item_id"),
                 value=str(e),
             )
             return None
 
     def process_messages(self, messages_data):
         gmeta = []
-        for message_data in messages_data:
-            entry = self.process_message(message_data)
+        for message_data, partition, offset in messages_data:
+            entry = self.process_message(message_data, partition, offset)
             if entry:
                 gmeta.append(entry)
         if not gmeta:

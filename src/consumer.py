@@ -1,13 +1,14 @@
 import json
 import logging
 
-from confluent_kafka import Consumer, KafkaException, TopicPartition
+from confluent_kafka import Consumer, KafkaError, KafkaException, TopicPartition
 
 
 class KafkaConsumerService:
-    def __init__(self, kafka_config, topics, message_processor):
+    def __init__(self, kafka_config, topic, partition, message_processor):
         self.kafka_config = kafka_config
-        self.topics = topics
+        self.topic = topic
+        self.partition = partition
         self.message_processor = message_processor
         self.consumer = Consumer(self.kafka_config)
 
@@ -15,40 +16,47 @@ class KafkaConsumerService:
         messages_data = []
         for msg in messages:
             if msg.error():
-                logging.error(f"Message error at offset {msg.offset()}: {msg.error()}.")
-                return False
+                if msg.error().code() == KafkaError.PARTITION_EOF:
+                    continue
+                if msg.fatal():
+                    logging.error(
+                        f"Message fatal error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
+                    )
+                    raise KafkaException(msg.error())
+                logging.warn(
+                    f"Message error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
+                )
+                continue
             try:
                 data = json.loads(msg.value())
-                messages_data.append(data)
+                messages_data.append((data, msg.partition(), msg.offset()))
             except json.JSONDecodeError as e:
-                logging.error(f"Data deserialization error at offset {msg.offset()}: {e}.")
-                return False
+                logging.error(
+                    f"Data deserialization error partition={msg.partition()} offset={msg.offset()}: {e}."
+                )
+                raise Exception(e)
         return messages_data
 
     def start(self):
-        self.consumer.subscribe(self.topics)
+        self.topic_partition = TopicPartition(self.topic, self.partition)
+        self.consumer.assign([self.topic_partition])
+        logging.info(f"Kafka consumer started on {self.topic} partition {self.partition}")
         try:
-            logging.info(f"Kafka consumer started. Subscribed to topics: {self.topics}")
             while True:
                 messages = self.consumer.consume(num_messages=50, timeout=5.0)
                 if not messages:
                     continue
 
-                logging.info(f"Consumed {len(messages)} messages")
-                first_msg = messages[0]
-                offset = 0 if not first_msg.offset() else first_msg.offset()
-                self.seek_partition = TopicPartition(first_msg.topic(), first_msg.partition(), offset)
+                logging.info(
+                    f"Consumed {len(messages)} messages partition={self.partition} "
+                    f"offsets {messages[0].offset()}-{messages[-1].offset()}"
+                )
 
                 messages_data = self.process_messages(messages)
-                if not messages_data:
-                    self.consumer.seek(self.seek_partition)
-                    continue
 
-                if not self.message_processor.process_messages(messages_data):
-                    self.consumer.seek(self.seek_partition)
-                    continue
-
-                self.consumer.commit(message=messages[-1], asynchronous=False)
+                if messages_data:
+                    self.message_processor.process_messages(messages_data)
+                    self.consumer.commit(message=messages[-1], asynchronous=False)
 
         except KeyboardInterrupt:
             logging.info("Kafka consumer interrupted. Exiting...")

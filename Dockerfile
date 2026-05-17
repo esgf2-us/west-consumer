@@ -13,8 +13,9 @@ RUN git clone https://github.com/confluentinc/librdkafka  && \
     ldconfig
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt supervisor
 
+COPY supervisord.conf /etc/supervisord.conf
 COPY ./src .
 
-CMD ["python", "main.py"]
+CMD ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
