@@ -1,6 +1,10 @@
 import logging
+import sys
 import time
+from datetime import datetime, timezone
+import json
 import jsonpatch
+from jsonpointer import JsonPointerException
 
 from globus_sdk import (
     ClientCredentialsAuthorizer,
@@ -30,14 +34,23 @@ class ConsumerSearchClient:
         for key, value in assets.items():
             normalized_assets.append({"name": key} | value)
         for asset in normalized_assets:
-            if "alternate" in asset and asset.get("alternate"):
-                asset["alternate"] = self.normalize_assets(asset["alternate"])
+            if "alternate" in asset:
+                if asset.get("alternate"):
+                    asset["alternate"] = self.normalize_assets(asset["alternate"])
+                else:
+                    del asset["alternate"]
         return normalized_assets
 
     def denormalize_assets(self, assets):
         denormalized_assets = {}
         for asset in assets:
-            name = asset.pop("name")
+            try:
+                name = asset.pop("name")
+            except AttributeError as e:
+                logging.error(f"Error when denormalizing assets: {e}")
+                logging.error(f"{asset}")
+                logging.error(f"{json.dumps(assets, indent=2, sort_keys=True)}")
+                sys.exit(1)
             if "alternate" in asset:
                 asset["alternate"] = self.denormalize_assets(asset["alternate"])
             else:
@@ -60,68 +73,60 @@ class ConsumerSearchClient:
     def search(self, query):
         return self.search_client.search(self.esgf_index, query)
 
-    def ingest(self, messages_data):
-        gmeta = []
-        for data in messages_data:
-            item = data.get("data").get("payload").get("item")
-            item["assets"] = item.get("assets")
-            gmeta.append(self.gmetaentry(item))
-
-        gmetalist = {"ingest_type": "GMetaList", "ingest_data": {"gmeta": gmeta}}
-
-        r = self.search_client.ingest(self.esgf_index, gmetalist)
-        task_id = r.get("task_id")
-
-        while True:
-            r = self.search_client.get_task(task_id)
-            state = r.get("state")
-            if state == "SUCCESS":
-                return True
-            if state == "FAILED":
-                logging.error(f"Ingestion task {task_id} failed")
-                logging.error(r.text)
-                return False
-            time.sleep(1)
-        return True
-
     def post(self, message_data):
         item = message_data.get("data").get("payload").get("item")
         try:
             globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
         except SearchAPIError as e:
             if e.http_status == 404:
+                now = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+                item["properties"]["created"] = now
+                item["properties"]["updated"] = now
                 item["assets"] = self.normalize_assets(item.get("assets"))
                 gmeta_entry = self.gmetaentry(item)
                 return gmeta_entry
 
         if globus_response.data:
-            logging.info(f"Item with ID {item.get('id')} already exists in the index.")
+            logging.warn(f"Item with ID {item.get('id')} already exists in the index.")
             self.error_producer.produce(
-                topic="esgf-local.errors",
+                topic="esgf2.integration-environment.west.errors",
                 key=item.get("id"),
                 value=f"Item with ID {item.get('id')} already exists in the index.",
             )
-            print("Item already exists, returning None")
             return None
         return None
 
     def json_patch(self, message_data):
         payload = message_data.get("data").get("payload")
         item_id = payload.get("item_id")
-        globus_response = self.search_client.get_subject(self.esgf_index, item_id)
-        if not globus_response.data:
-            logging.info(f"Item with ID {item_id} does not exist in the index.")
-            self.error_producer.produce(
-                topic="esgf-local.errors",
-                key=item_id,
-                value=f"Item with ID {item_id} does not exist in the index.",
-            )
-            return None
+        logging.debug(f"Applying JSON patch to item: {item_id}")
+        try:
+            globus_response = self.search_client.get_subject(self.esgf_index, item_id)
+        except SearchAPIError as e:
+            if e.http_status == 404:
+                logging.warn(f"Item with ID {item_id} does not exist in the index.")
+                self.error_producer.produce(
+                    topic="esgf2.integration-environment.west.errors",
+                    key=item_id,
+                    value=f"Item with ID {item_id} does not exist in the index.",
+                )
+                return None
+            logging.error(f"Error when getting item {item_id} from Globus Search: {e}")
+            sys.exit(1)
         item = globus_response.data.get("entries")[0].get("content")
         item["assets"] = self.denormalize_assets(item.get("assets"))
-        patched_item = jsonpatch.apply_patch(item, payload.get("patch").get("operations"))
+
+        try:
+            patched_item = jsonpatch.apply_patch(item, payload.get("patch"))
+        except Exception as e:
+            logging.error(f"Error when applying JSON patch to item {item_id}: {e}")
+            sys.exit(1)
+
+        now = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+        patched_item["properties"]["updated"] = now
         patched_item["assets"] = self.normalize_assets(patched_item.get("assets"))
         gmeta_entry = self.gmetaentry(patched_item)
+        logging.debug(f"Patched entry: {gmeta_entry}")
         return gmeta_entry
 
     def delete(self, subject):
@@ -129,7 +134,7 @@ class ConsumerSearchClient:
         if globus_response.data:
             self.search_client.delete_subject(self.esgf_index, subject)
             return True
-        logging.info(f"Item with ID {subject} does not exist in the index.")
+        logging.warn(f"Item with ID {subject} does not exist in the index.")
         self.error_producer.produce(
             topic="esgf-local.errors",
             key=subject,
@@ -141,7 +146,7 @@ class ConsumerSearchClient:
         try:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
-            print(f"Processing message with method: {method}")
+            logging.info(f"Processing message with method: {method}")
             if method == "POST":
                 return self.post(message_data)
             if method == "PUT":
@@ -171,16 +176,17 @@ class ConsumerSearchClient:
 
         r = self.search_client.ingest(self.esgf_index, gmetalist)
         task_id = r.get("task_id")
-        print("Ingested successfully, waiting for task to complete...")
+        logging.info("Submitted ingest task successfully, waiting for task to complete...")
 
         while True:
             r = self.search_client.get_task(task_id)
             state = r.get("state")
             if state == "SUCCESS":
+                logging.info(f"Ingestion task {task_id} completed successfully")
                 return True
             if state == "FAILED":
                 logging.error(f"Ingestion task {task_id} failed")
                 logging.error(r.text)
-                return False
+                sys.exit(1)
             time.sleep(1)
         return True

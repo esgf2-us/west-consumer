@@ -11,7 +11,7 @@ load_dotenv()
 logger = logging.getLogger("kafka")
 logger.setLevel(logging.WARN)
 
-run_environment = os.environ.get("RUN_ENVIRONMENT", None)
+run_environment = os.environ.get("RUN_ENVIRONMENT", "local")
 
 
 # Kafka connection details
@@ -32,5 +32,5 @@ else:
             "sasl.username": os.environ.get("CONFLUENT_CLOUD_USERNAME"),
             "sasl.password": os.environ.get("CONFLUENT_CLOUD_PASSWORD"),
         },
-        "topic": os.environ.get("TOPIC", "esgf2.data-challenges.01.errors"),
+        "topic": os.environ.get("ERRORS_TOPIC", "esgf-local.errors"),
     }

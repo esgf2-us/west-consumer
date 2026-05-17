@@ -26,13 +26,13 @@ else:
             "auto.offset.reset": "earliest",
             "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS"),
             "enable.auto.commit": False,
-            "group.id": "westconsumer",
+            "group.id": os.environ.get("GROUP_ID"),
             "sasl.mechanism": "PLAIN",
             "sasl.username": os.environ.get("CONFLUENT_CLOUD_USERNAME"),
             "sasl.password": os.environ.get("CONFLUENT_CLOUD_PASSWORD"),
             "security.protocol": "SASL_SSL",
         },
-        "topics": [os.environ.get("TOPICS")],
+        "topics": [os.environ.get("TRANSACTIONS_TOPIC")],
     }
 
 if os.environ.get("KAFKA_CLIENT_DEBUG", False):
