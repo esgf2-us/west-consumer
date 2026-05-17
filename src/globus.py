@@ -115,10 +115,14 @@ class ConsumerSearchClient:
         item["assets"] = self.denormalize_assets(item.get("assets"))
 
         try:
-            patched_item = jsonpatch.apply_patch(item, payload.get("patch"))
+            patch_operations = payload.get("patch")
+            if isinstance(patch_operations, dict):
+                patch_operations = patch_operations.get("operations")
+            patched_item = jsonpatch.apply_patch(item, patch_operations)
         except Exception as e:
             logging.error(f"Error when applying JSON patch to item {item_id}: {e}")
-            sys.exit(1)
+            logging.error(f"Patch operations: {patch_operations}")
+            return None
 
         now = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
         patched_item["properties"]["updated"] = now
