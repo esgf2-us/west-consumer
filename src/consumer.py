@@ -16,7 +16,7 @@ class KafkaConsumerService:
         messages_data = []
         for msg in messages:
             if msg.error():
-                if msg.error().code() == KafkaError.PARTITION_EOF:
+                if msg.error().code() == KafkaError._PARTITION_EOF:
                     continue
                 if msg.fatal():
                     logging.error(

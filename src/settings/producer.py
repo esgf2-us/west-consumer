@@ -16,21 +16,31 @@ run_environment = os.environ.get("RUN_ENVIRONMENT", "local")
 
 # Kafka connection details
 if run_environment == "local":
+    _kafka_config = {
+        "bootstrap.servers": "broker:29092",
+        "client.id": socket.gethostname(),
+    }
     error_event_stream = {
-        "config": {
-            "bootstrap.servers": "host.docker.internal:9092",
-            "client.id": socket.gethostname(),
-        },
+        "config": _kafka_config,
         "topic": "esgf-local.errors",
     }
+    success_event_stream = {
+        "config": _kafka_config,
+        "topic": "esgf-local.success",
+    }
 else:
+    _kafka_config = {
+        "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS"),
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanisms": "PLAIN",
+        "sasl.username": os.environ.get("CONFLUENT_CLOUD_USERNAME"),
+        "sasl.password": os.environ.get("CONFLUENT_CLOUD_PASSWORD"),
+    }
     error_event_stream = {
-        "config": {
-            "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS"),
-            "security.protocol": "SASL_SSL",
-            "sasl.mechanisms": "PLAIN",
-            "sasl.username": os.environ.get("CONFLUENT_CLOUD_USERNAME"),
-            "sasl.password": os.environ.get("CONFLUENT_CLOUD_PASSWORD"),
-        },
+        "config": _kafka_config,
         "topic": os.environ.get("ERRORS_TOPIC", "esgf-local.errors"),
+    }
+    success_event_stream = {
+        "config": _kafka_config,
+        "topic": os.environ.get("SUCCESS_TOPIC", "esgf-local.success"),
     }

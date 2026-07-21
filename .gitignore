@@ -3,8 +3,10 @@
 *.iml
 .vscode
 venv
+.venv
 dist
 build
 *.egg-info
 .env*
+!.env.example
 .pytest*

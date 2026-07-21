@@ -15,7 +15,7 @@ if run_environment == "local":
     event_stream = {
         "config": {
             "auto.offset.reset": "earliest",
-            "bootstrap.servers": "host.docker.internal:9092",
+            "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS", "broker:29092"),
             "client.id": client_id,
             "enable.auto.commit": False,
             "group.id": "westconsumer",

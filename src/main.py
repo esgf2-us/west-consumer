@@ -9,7 +9,7 @@ from settings.consumer import (
     globus_search,
     globus_search_client_credentials,
 )
-from settings.producer import error_event_stream
+from settings.producer import error_event_stream, success_event_stream
 
 logging.basicConfig(
     format=f"%(asctime)s %(levelname)s C{consumer_instance} - %(message)s",
@@ -22,8 +22,17 @@ if __name__ == "__main__":
         config=error_event_stream.get("config"),
         topic=error_event_stream.get("topic"),
     )
+    success_producer = KafkaProducer(
+        config=success_event_stream.get("config"),
+        topic=success_event_stream.get("topic"),
+    )
 
-    message_processor = ConsumerSearchClient(globus_search_client_credentials, globus_search.get("index"), error_producer)
+    message_processor = ConsumerSearchClient(
+        globus_search_client_credentials,
+        globus_search.get("index"),
+        error_producer,
+        success_producer,
+    )
 
     consumer_service = KafkaConsumerService(
         event_stream.get("config"),
