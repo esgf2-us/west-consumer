@@ -3,37 +3,43 @@ import socket
 
 from dotenv import load_dotenv
 
-# Load the .env file
 load_dotenv()
 
 run_environment = os.environ.get("RUN_ENVIRONMENT", "local")
+consumer_instance = os.environ["CONSUMER_INSTANCE"]
+partition = int(consumer_instance)
+client_id = f"{socket.gethostname()}-{consumer_instance}"
 
 # ESGF2 Event Stream Service Consumer
 if run_environment == "local":
     event_stream = {
         "config": {
             "auto.offset.reset": "earliest",
-            "bootstrap.servers": "host.docker.internal:9092",
-            "client.id": socket.gethostname(),
+            "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS", "broker:29092"),
+            "client.id": client_id,
             "enable.auto.commit": False,
             "group.id": "westconsumer",
         },
-        "topics": ["esgf-local.transactions"],
+        "topic": "esgf-local.transactions",
+        "partition": partition,
     }
 else:
     event_stream = {
         "config": {
             "auto.offset.reset": "earliest",
             "bootstrap.servers": os.environ.get("BOOTSTRAP_SERVERS"),
+            "client.id": client_id,
             "enable.auto.commit": False,
-            "group.id": "westconsumer",
+            "group.id": os.environ.get("GROUP_ID"),
             "sasl.mechanism": "PLAIN",
             "sasl.username": os.environ.get("CONFLUENT_CLOUD_USERNAME"),
             "sasl.password": os.environ.get("CONFLUENT_CLOUD_PASSWORD"),
             "security.protocol": "SASL_SSL",
         },
-        "topics": [os.environ.get("TOPICS")],
+        "topic": os.environ.get("TRANSACTIONS_TOPIC"),
+        "partition": partition,
     }
+
 
 if os.environ.get("KAFKA_CLIENT_DEBUG", False):
     event_stream["config"]["debug"] = "all"

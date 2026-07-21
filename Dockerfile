@@ -12,9 +12,16 @@ RUN git clone https://github.com/confluentinc/librdkafka  && \
     ./configure --install-deps && make && make install && \
     ldconfig
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+WORKDIR /var/task
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+ENV PATH=/var/task/.venv/bin:${PATH}
+
+COPY supervisord.conf /etc/supervisord.conf
 COPY ./src .
 
-CMD ["python", "main.py"]
+CMD ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
