@@ -1,0 +1,1 @@
+"""West Consumer package."""

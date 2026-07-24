@@ -1,3 +1,4 @@
+import sys
 import logging
 from abc import ABC, abstractmethod
 
@@ -36,6 +37,7 @@ class KafkaProducer(BaseProducer):
                 logger.info(f"Message {msg.key()} successfully delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
             delivery_reports.append((err, msg))
 
+        print(f"Producing message: {value}", file=sys.stderr)
         self.producer.produce(topic=self.topic, key=key, value=value, callback=delivery_report)
         self.producer.flush()
         return delivery_reports

@@ -3,8 +3,9 @@ import logging
 import sys
 import time
 from datetime import datetime, timezone
-
+from importlib.metadata import PackageNotFoundError, version
 import jsonpatch
+
 from esgf_core_utils.models.kafka.events import (
     Auth,
     Error,
@@ -65,7 +66,7 @@ class ConsumerSearchClient:
         return Metadata(
             auth=Auth.model_validate(original_metadata["auth"]),
             event_id=original_metadata["event_id"],
-            publisher=original_metadata["publisher"],
+            publisher=Publisher(package="west-consumer", version=version("west-consumer")),
             request_id=original_metadata["request_id"],
             time=original_metadata["time"],
             schema_version=original_metadata["schema_version"],
@@ -109,7 +110,7 @@ class ConsumerSearchClient:
             ),
             error=Error(
                 detail=detail,
-                instance=item_id,
+                instance=original_metadata["request_id"],
                 status=status,
                 title=title,
                 type=type,
@@ -161,23 +162,30 @@ class ConsumerSearchClient:
         return self.search_client.search(self.esgf_index, query)
 
     def post(self, message_data, partition, offset):
-        item = message_data.get("data").get("payload").get("item")
+        payload = message_data.get("data").get("payload")
+        collection_id = payload.get("collection_id")
+        item = payload.get("item")
+        item_id = item.get("id")
         try:
-            globus_response = self.search_client.get_subject(self.esgf_index, item.get("id"))
+            globus_response = self.search_client.get_subject(self.esgf_index, item_id)
         except SearchAPIError as e:
             if e.http_status == 404:
                 now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
                 item["properties"]["created"] = now
                 item["properties"]["updated"] = now
-                item["assets"] = self.normalize_assets(item.get("assets"))
+                assets = item.get("assets")
+                for asset in assets.values():
+                    asset["created"] = now
+                    asset["updated"] = now
+                item["assets"] = self.normalize_assets(assets)
                 return self.gmetaentry(item)
-            logging.error(f"Error when getting item {item.get('id')} from Globus Search: {e}")
+            logging.error(f"Error when getting item {item_id} from Globus Search: {e}")
             sys.exit(1)
 
         if globus_response.data:
             detail = {
-                "code": "ItemAlreadyExists",
-                "description": f"Item {item.get('id')} already exists"
+                "code": "ItemAlreadyExistsError",
+                "description": f"Item {item_id} in collection {collection_id} already exists"
             }
             logging.warn(detail)
             event = self.error_event(
@@ -186,11 +194,11 @@ class ConsumerSearchClient:
                 offset,
                 detail=json.dumps(detail),
                 status=409,
-                title=f"{item.get('id')} already exists",
+                title=f"{item_id} already exists",
                 type="ItemAlreadyExists",
             )
             self.error_producer.produce(
-                key=event.data.payload.item_id,
+                key=item_id,
                 value=event.model_dump_json(),
             )
         return None
@@ -277,9 +285,10 @@ class ConsumerSearchClient:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
             logging.info(
-                f"Processing message method={method} partition={partition} offset={offset}"
+                f"Processing B message method={method} partition={partition} offset={offset}"
             )
             if method == "POST":
+                print(f"Processing POST message: {message_data}")
                 return self.post(message_data, partition, offset)
             if method == "PUT":
                 return self.put(message_data, partition, offset)

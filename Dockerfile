@@ -17,11 +17,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /var/task
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
-
+RUN uv sync --frozen --no-dev --no-install-project
+COPY ./src ./src
+RUN uv sync --frozen --no-dev --no-editable
 ENV PATH=/var/task/.venv/bin:${PATH}
+RUN python -c \
+    "from importlib.metadata import version; print(version('west-consumer'))"
 
 COPY supervisord.conf /etc/supervisord.conf
-COPY ./src .
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
