@@ -286,7 +286,7 @@ class ConsumerSearchClient:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
             logging.info(
-                f"Processing B message method={method} partition={partition} offset={offset}"
+                f"Processing message method={method} partition={partition} offset={offset}"
             )
             if method == "POST":
                 return self.post(message_data, partition, offset)
