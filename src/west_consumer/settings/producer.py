@@ -44,3 +44,6 @@ else:
         "config": _kafka_config,
         "topic": os.environ.get("SUCCESS_TOPIC", "esgf-local.success"),
     }
+
+print(error_event_stream)
+print(success_event_stream)
