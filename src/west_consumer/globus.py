@@ -289,7 +289,6 @@ class ConsumerSearchClient:
                 f"Processing B message method={method} partition={partition} offset={offset}"
             )
             if method == "POST":
-                print(f"Processing POST message: {message_data}")
                 return self.post(message_data, partition, offset)
             if method == "PUT":
                 return self.put(message_data, partition, offset)
