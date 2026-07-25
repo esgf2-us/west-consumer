@@ -2,6 +2,7 @@ import json
 import logging
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 import jsonpatch
@@ -65,7 +66,7 @@ class ConsumerSearchClient:
         original_metadata = message_data["metadata"]
         return Metadata(
             auth=Auth.model_validate(original_metadata["auth"]),
-            event_id=original_metadata["event_id"],
+            event_id=uuid.uuid4().hex,
             publisher=Publisher(package="west-consumer", version=version("west-consumer")),
             request_id=original_metadata["request_id"],
             time=original_metadata["time"],
