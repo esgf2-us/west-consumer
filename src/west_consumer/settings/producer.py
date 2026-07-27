@@ -40,7 +40,11 @@ else:
         "config": _kafka_config,
         "topic": os.environ.get("ERRORS_TOPIC", "esgf-local.errors"),
     }
+    # Temporary workaround for missing success topic
     success_event_stream = {
         "config": _kafka_config,
-        "topic": os.environ.get("SUCCESS_TOPIC", "esgf-local.success"),
+        "topic": error_event_stream["topic"].removesuffix("errors") + "success",
     }
+
+print(error_event_stream)
+print(success_event_stream)

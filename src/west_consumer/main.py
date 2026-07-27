@@ -1,15 +1,15 @@
 import logging
 
-from consumer import KafkaConsumerService
-from globus import ConsumerSearchClient
-from producer import KafkaProducer
-from settings.consumer import (
+from west_consumer.consumer import KafkaConsumerService
+from west_consumer.globus import ConsumerSearchClient
+from west_consumer.producer import KafkaProducer
+from west_consumer.settings.consumer import (
     consumer_instance,
     event_stream,
     globus_search,
     globus_search_client_credentials,
 )
-from settings.producer import error_event_stream, success_event_stream
+from west_consumer.settings.producer import error_event_stream, success_event_stream
 
 logging.basicConfig(
     format=f"%(asctime)s %(levelname)s C{consumer_instance} - %(message)s",
