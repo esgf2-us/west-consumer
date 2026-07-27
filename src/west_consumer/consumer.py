@@ -22,7 +22,7 @@ class KafkaConsumerService:
                     f"Message fatal error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
                 )
                 raise KafkaException(msg.error())
-            logging.warn(
+            logging.warning(
                 f"Message error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
             )
             return None
