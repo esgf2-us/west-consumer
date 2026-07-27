@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 
 from confluent_kafka import Consumer, KafkaError, KafkaException, TopicPartition
 
@@ -12,30 +13,27 @@ class KafkaConsumerService:
         self.message_processor = message_processor
         self.consumer = Consumer(self.kafka_config)
 
-    def process_messages(self, messages):
-        messages_data = []
-        for msg in messages:
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
-                if msg.fatal():
-                    logging.error(
-                        f"Message fatal error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
-                    )
-                    raise KafkaException(msg.error())
-                logging.warn(
-                    f"Message error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
-                )
-                continue
-            try:
-                data = json.loads(msg.value())
-                messages_data.append((data, msg.partition(), msg.offset()))
-            except json.JSONDecodeError as e:
+    def process_message(self, msg):
+        if msg.error():
+            if msg.error().code() == KafkaError._PARTITION_EOF:
+                return None
+            if msg.fatal():
                 logging.error(
-                    f"Data deserialization error partition={msg.partition()} offset={msg.offset()}: {e}."
+                    f"Message fatal error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
                 )
-                raise Exception(e)
-        return messages_data
+                raise KafkaException(msg.error())
+            logging.warn(
+                f"Message error partition={msg.partition()} offset={msg.offset()}: {msg.error()}."
+            )
+            return None
+        try:
+            data = json.loads(msg.value())
+            return (data, msg.key(), msg.partition(), msg.offset())
+        except json.JSONDecodeError as e:
+            logging.error(
+                f"Data deserialization error partition={msg.partition()} offset={msg.offset()}: {e}."
+            )
+            raise Exception(e)
 
     def start(self):
         self.topic_partition = TopicPartition(self.topic, self.partition)
@@ -43,20 +41,19 @@ class KafkaConsumerService:
         logging.info(f"Kafka consumer started on {self.topic} partition {self.partition}")
         try:
             while True:
-                messages = self.consumer.consume(num_messages=50, timeout=5.0)
-                if not messages:
+                msg = self.consumer.poll(timeout=5.0)
+                if msg is None:
+                    time.sleep(0.1) # 100ms sleep to avoid busy-waiting
                     continue
 
                 logging.info(
-                    f"Consumed {len(messages)} messages partition={self.partition} "
-                    f"offsets {messages[0].offset()}-{messages[-1].offset()}"
+                    f"Polled message partition={msg.partition()} offset={msg.offset()}"
                 )
 
-                messages_data = self.process_messages(messages)
-
-                if messages_data:
-                    self.message_processor.process_messages(messages_data)
-                    self.consumer.commit(message=messages[-1], asynchronous=False)
+                message_data = self.process_message(msg)
+                if message_data:
+                    self.message_processor.process_message(message_data)
+                    self.consumer.commit(message=msg, asynchronous=False)
 
         except KeyboardInterrupt:
             logging.info("Kafka consumer interrupted. Exiting...")

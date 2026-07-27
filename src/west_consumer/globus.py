@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import sys
 import time
 import uuid
@@ -38,9 +39,45 @@ class ConsumerSearchClient:
             scopes=SearchScopes.all,
         )
         self.search_client = SearchClient(authorizer=authorizer)
+        # SDK retries 429/5xx; raise ceilings for sustained rate limits.
+        self.search_client.transport.max_retries = 10
+        self.search_client.transport.max_sleep = 60
         self.esgf_index = search_index
         self.error_producer = error_producer
         self.success_producer = success_producer
+
+    @staticmethod
+    def _retry_after_seconds(error: SearchAPIError) -> float | None:
+        headers = error.headers or {}
+        for key, value in headers.items():
+            if key.lower() == "retry-after":
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    def _search_call(self, fn, *args, **kwargs):
+        """Call a Globus Search method, retrying indefinitely on HTTP 429."""
+        attempt = 0
+        while True:
+            try:
+                return fn(*args, **kwargs)
+            except SearchAPIError as e:
+                if e.http_status != 429:
+                    raise
+                attempt += 1
+                wait = self._retry_after_seconds(e)
+                if wait is None:
+                    wait = min(2 ** min(attempt, 6), 60) + random.uniform(0, 1)
+                else:
+                    wait = wait + random.uniform(0, 0.5)
+                logging.warning(
+                    "Globus Search rate limited (429); retrying in %.1fs (attempt %d)",
+                    wait,
+                    attempt,
+                )
+                time.sleep(wait)
 
     def _item_id(self, payload):
         return payload.get("item_id") or (payload.get("item") or {}).get("id")
@@ -157,10 +194,10 @@ class ConsumerSearchClient:
         }
 
     def get_index(self):
-        return self.search_client.get_index(self.esgf_index)
+        return self._search_call(self.search_client.get_index, self.esgf_index)
 
     def search(self, query):
-        return self.search_client.search(self.esgf_index, query)
+        return self._search_call(self.search_client.search, self.esgf_index, query)
 
     def post(self, message_data, partition, offset):
         payload = message_data.get("data").get("payload")
@@ -168,7 +205,9 @@ class ConsumerSearchClient:
         item = payload.get("item")
         item_id = item.get("id")
         try:
-            globus_response = self.search_client.get_subject(self.esgf_index, item_id)
+            globus_response = self._search_call(
+                self.search_client.get_subject, self.esgf_index, item_id
+            )
         except SearchAPIError as e:
             if e.http_status == 404:
                 now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -211,7 +250,9 @@ class ConsumerSearchClient:
         collection_id = payload.get("collection_id")
         logging.debug(f"Applying JSON patch to item: {item_id}")
         try:
-            globus_response = self.search_client.get_subject(self.esgf_index, item_id)
+            globus_response = self._search_call(
+                self.search_client.get_subject, self.esgf_index, item_id
+            )
         except SearchAPIError as e:
             if e.http_status == 404:
                 detail = {
@@ -274,14 +315,19 @@ class ConsumerSearchClient:
         return gmeta_entry
 
     def delete(self, subject):
-        globus_response = self.search_client.get_subject(self.esgf_index, subject)
+        globus_response = self._search_call(
+            self.search_client.get_subject, self.esgf_index, subject
+        )
         if globus_response.data:
-            self.search_client.delete_subject(self.esgf_index, subject)
+            self._search_call(
+                self.search_client.delete_subject, self.esgf_index, subject
+            )
             return True
         logging.warn(f"Item with ID {subject} does not exist in the index.")
         return None
 
-    def process_message(self, message_data, partition, offset):
+    def process_message(self, message):
+        message_data, key, partition, offset = message
         try:
             payload = message_data.get("data").get("payload")
             method = payload.get("method")
@@ -289,45 +335,41 @@ class ConsumerSearchClient:
                 f"Processing message method={method} partition={partition} offset={offset}"
             )
             if method == "POST":
-                return self.post(message_data, partition, offset)
-            if method == "PUT":
-                return self.put(message_data, partition, offset)
-            if method == "JSON_PATCH" or method == "PATCH":
-                return self.json_patch(message_data, partition, offset)
-            return None
+                entry = self.post(message_data, partition, offset)
+            elif method == "PUT":
+                entry = self.put(message_data, partition, offset)
+            elif method == "JSON_PATCH" or method == "PATCH":
+                entry = self.json_patch(message_data, partition, offset)
+            else:
+                entry = None
         except Exception as e:
             logging.error(
                 f"Error processing message partition={partition} offset={offset}: {e}"
             )
-            return None
+            sys.exit(1)
 
-    def process_messages(self, messages_data):
-        pending = []
-        for message_data, partition, offset in messages_data:
-            entry = self.process_message(message_data, partition, offset)
-            if entry:
-                pending.append((entry, message_data, partition, offset))
-        if not pending:
+        if not entry:
             return True
 
-        gmeta = [entry for entry, _, _, _ in pending]
-        gmetalist = {"ingest_type": "GMetaList", "ingest_data": {"gmeta": gmeta}}
+        gmetalist = {
+            "ingest_type": "GMetaList",
+            "ingest_data": {"gmeta": [entry]},
+        }
 
-        r = self.search_client.ingest(self.esgf_index, gmetalist)
+        r = self._search_call(self.search_client.ingest, self.esgf_index, gmetalist)
         task_id = r.get("task_id")
         logging.info("Submitted ingest task successfully, waiting for task to complete...")
 
         while True:
-            r = self.search_client.get_task(task_id)
+            r = self._search_call(self.search_client.get_task, task_id)
             state = r.get("state")
             if state == "SUCCESS":
                 logging.info(f"Ingestion task {task_id} completed successfully")
-                for _, message_data, partition, offset in pending:
-                    event = self.success_event(message_data, partition, offset)
-                    self.success_producer.produce(
-                        key=event.data.payload.item_id,
-                        value=event.model_dump_json(),
-                    )
+                event = self.success_event(message_data, partition, offset)
+                self.success_producer.produce(
+                    key=event.data.payload.item_id,
+                    value=event.model_dump_json(),
+                )
                 return True
             if state == "FAILED":
                 logging.error(f"Ingestion task {task_id} failed")

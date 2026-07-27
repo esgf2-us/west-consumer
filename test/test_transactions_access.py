@@ -1,8 +1,8 @@
 """Simple connectivity check for the transactions event stream.
 
 Reuses the application's own consumer settings and verifies that the
-configured broker is reachable, the transactions topic exists, and the
-assigned partition's offsets can be queried.
+configured broker is reachable, the transactions topic exists, and
+watermark offsets can be queried for all six partitions.
 
 Run from the repo root:
 
@@ -20,14 +20,15 @@ os.environ.setdefault("CONSUMER_INSTANCE", "0")
 
 from confluent_kafka import Consumer, KafkaException, TopicPartition  # noqa: E402
 
-from settings.consumer import event_stream  # noqa: E402
+from west_consumer.settings.consumer import event_stream  # noqa: E402
 
 logging.basicConfig(format="%(asctime)s %(levelname)s - %(message)s", level=logging.INFO)
+
+EXPECTED_PARTITION_COUNT = 6
 
 
 def check_access():
     topic = event_stream["topic"]
-    partition = event_stream["partition"]
     consumer = Consumer(event_stream["config"])
 
     try:
@@ -46,19 +47,29 @@ def check_access():
         partitions = sorted(topic_metadata.partitions)
         logging.info(f"Topic {topic!r} is accessible with {len(partitions)} partitions: {partitions}")
 
-        if partition not in topic_metadata.partitions:
-            logging.error(f"Assigned partition {partition} does not exist on topic {topic!r}")
+        if len(partitions) != EXPECTED_PARTITION_COUNT:
+            logging.error(
+                f"Expected {EXPECTED_PARTITION_COUNT} partitions on {topic!r}, found {len(partitions)}"
+            )
             return False
 
-        try:
-            low, high = consumer.get_watermark_offsets(TopicPartition(topic, partition), timeout=10)
-        except KafkaException as e:
-            logging.error(f"Failed to read offsets for partition {partition}: {e}")
-            return False
+        total_messages = 0
+        for partition in partitions:
+            try:
+                low, high = consumer.get_watermark_offsets(
+                    TopicPartition(topic, partition), timeout=10
+                )
+            except KafkaException as e:
+                logging.error(f"Failed to read offsets for partition {partition}: {e}")
+                return False
 
-        logging.info(
-            f"Partition {partition} offsets: low={low} high={high} ({high - low} messages available)"
-        )
+            available = high - low
+            total_messages += available
+            logging.info(
+                f"Partition {partition} offsets: low={low} high={high} ({available} messages available)"
+            )
+
+        logging.info(f"Total messages available across all partitions: {total_messages}")
         logging.info("Transactions event stream access OK")
         return True
     finally:
