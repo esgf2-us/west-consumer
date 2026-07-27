@@ -106,7 +106,7 @@ class ConsumerSearchClient:
             event_id=uuid.uuid4().hex,
             publisher=Publisher(package="west-consumer", version=version("west-consumer")),
             request_id=original_metadata["request_id"],
-            time=original_metadata["time"],
+            time=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             schema_version=original_metadata["schema_version"],
         )
 
