@@ -106,7 +106,7 @@ class ConsumerSearchClient:
             event_id=uuid.uuid4().hex,
             publisher=Publisher(package="west-consumer", version=version("west-consumer")),
             request_id=original_metadata["request_id"],
-            time=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            time=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             schema_version=original_metadata["schema_version"],
         )
 
@@ -210,13 +210,10 @@ class ConsumerSearchClient:
             )
         except SearchAPIError as e:
             if e.http_status == 404:
-                now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 item["properties"]["created"] = now
                 item["properties"]["updated"] = now
                 assets = item.get("assets")
-                for asset in assets.values():
-                    asset["created"] = now
-                    asset["updated"] = now
                 item["assets"] = self.normalize_assets(assets)
                 return self.gmetaentry(item)
             logging.error(f"Error when getting item {item_id} from Globus Search: {e}")
@@ -307,7 +304,7 @@ class ConsumerSearchClient:
             )
             return None
 
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         patched_item["properties"]["updated"] = now
         patched_item["assets"] = self.normalize_assets(patched_item.get("assets"))
         gmeta_entry = self.gmetaentry(patched_item)
